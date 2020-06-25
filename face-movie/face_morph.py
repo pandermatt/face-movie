@@ -1,5 +1,5 @@
-import numpy as np
 import cv2
+import numpy as np
 from PIL import Image
 
 
@@ -16,7 +16,7 @@ def warp_im(im, src_landmarks, dst_landmarks, dst_triangulation):
 
 
 def morph_triangle(im, im_out, src_tri, dst_tri):
-    # For efficiency, we crop out a rectangular region containing the triangles 
+    # For efficiency, we crop out a rectangular region containing the triangles
     # to warp only that small part of the image.
 
     # Get bounding boxes around triangles
@@ -38,20 +38,19 @@ def morph_triangle(im, im_out, src_tri, dst_tri):
     warpImage1 = affine_transform(cropped_im, cropped_src_tri, cropped_dst_tri, size)
 
     # Copy triangular region of the cropped patch to the output image
-    im_out[dr[1]:dr[1]+dr[3], dr[0]:dr[0]+dr[2]] = \
-        im_out[dr[1]:dr[1]+dr[3], dr[0]:dr[0]+dr[2]] * (1 - mask) + warpImage1 * mask
+    im_out[dr[1]:dr[1] + dr[3], dr[0]:dr[0] + dr[2]] = \
+        im_out[dr[1]:dr[1] + dr[3], dr[0]:dr[0] + dr[2]] * (1 - mask) + warpImage1 * mask
 
 
 def affine_transform(src, src_tri, dst_tri, size):
     M = cv2.getAffineTransform(np.float32(src_tri), np.float32(dst_tri))
     # BORDER_REFLECT_101 is good for hiding seems
     dst = cv2.warpAffine(src, M, size, borderMode=cv2.BORDER_REFLECT_101)
-    return dst        
+    return dst
 
 
-def morph_seq(total_frames, im1, im2, im1_landmarks, im2_landmarks, 
+def morph_seq(total_frames, im1, im2, im1_landmarks, im2_landmarks,
               triangulation, size, out_name, stream):
-
     im1 = np.float32(im1)
     im2 = np.float32(im2)
 
@@ -70,4 +69,3 @@ def morph_seq(total_frames, im1, im2, im1_landmarks, im2_landmarks,
         print(j)
 
     return res
-

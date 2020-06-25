@@ -1,10 +1,11 @@
 # USAGE: python face-movie/align.py -images IMAGES -target TARGET [-overlay] [-border BORDER] -outdir OUTDIR
 
+import argparse
+import os
+
 import cv2
 import dlib
 import numpy as np
-import argparse
-import os
 
 PREDICTOR_PATH = "./shape_predictor_68_face_landmarks.dat"
 
@@ -19,20 +20,20 @@ JAW_POINTS = list(range(0, 17))
 
 # Points used to line up the images.
 ALIGN_POINTS = (LEFT_BROW_POINTS + RIGHT_EYE_POINTS + LEFT_EYE_POINTS +
-                    RIGHT_BROW_POINTS + NOSE_POINTS + MOUTH_POINTS)
-
+                RIGHT_BROW_POINTS + NOSE_POINTS + MOUTH_POINTS)
 
 DETECTOR = dlib.get_frontal_face_detector()
 PREDICTOR = dlib.shape_predictor(PREDICTOR_PATH)
 
 cache = dict()
 
+
 def prompt_user_to_choose_face(im, rects):
     im = im.copy()
     h, w = im.shape[:2]
     for i in range(len(rects)):
         d = rects[i]
-        x1, y1, x2, y2 = d.left(), d.top(), d.right()+1, d.bottom()+1
+        x1, y1, x2, y2 = d.left(), d.top(), d.right() + 1, d.bottom() + 1
         cv2.rectangle(im, (x1, y1), (x2, y2), color=(255, 0, 0), thickness=5)
         cv2.putText(im, str(i), (d.center().x, d.center().y),
                     fontFace=cv2.FONT_HERSHEY_SCRIPT_SIMPLEX,
@@ -47,29 +48,31 @@ def prompt_user_to_choose_face(im, rects):
     cv2.destroyAllWindows(); cv2.waitKey(1)
     return rects[target_index]
 
+
 def get_landmarks(im):
     rects = DETECTOR(im, 1)
     if len(rects) == 0 and len(DETECTOR(im, 0)) > 0:
         rects = DETECTOR(im, 0)
     assert len(rects) > 0, "No faces found!"
-    target_rect = rects[0] 
-    if len(rects) > 1:
-        target_rect = prompt_user_to_choose_face(im, rects)
+    target_rect = rects[0]
+    # if len(rects) > 1:
+    #     target_rect = prompt_user_to_choose_face(im, rects)
     res = np.matrix([[p.x, p.y] for p in PREDICTOR(im, target_rect).parts()])
     return res
+
 
 def annotate_landmarks(im, landmarks):
     im = im.copy()
     for idx, point in enumerate(landmarks):
         pos = (point[0], point[1])
-        cv2.putText(im, str(idx+1), pos,
+        cv2.putText(im, str(idx + 1), pos,
                     fontFace=cv2.FONT_HERSHEY_SCRIPT_SIMPLEX,
                     fontScale=0.4,
                     color=(255, 255, 255))
         cv2.circle(im, pos, 3, color=(255, 0, 0))
     cv2.imwrite("landmarks.jpg", im)
 
-    
+
 def transformation_from_points(points1, points2):
     """
     Return an affine transformation [s * R | T] such that:
@@ -108,6 +111,7 @@ def transformation_from_points(points1, points2):
     return np.vstack([np.hstack(((s2 / s1) * R, c2.T - (s2 / s1) * R * c1.T)),
                       np.matrix([0., 0., 1.])])
 
+
 def read_im_and_landmarks(fname):
     if fname in cache:
         return cache[fname]
@@ -116,6 +120,7 @@ def read_im_and_landmarks(fname):
 
     cache[fname] = (im, s)
     return im, s
+
 
 def warp_im(im, M, dshape, prev):
     output_im = cv2.warpAffine(
@@ -127,10 +132,10 @@ def warp_im(im, M, dshape, prev):
     if prev is not None:
         # overlay the image on the previous images
         mask = cv2.warpAffine(
-            np.ones_like(im, dtype='float32'), M, 
+            np.ones_like(im, dtype='float32'), M,
             (dshape[1], dshape[0]), flags=cv2.INTER_CUBIC,
         )
-        output_im = mask * output_im + (1-mask) * prev
+        output_im = mask * output_im + (1 - mask) * prev
 
     return output_im
 
@@ -145,15 +150,17 @@ def align_images(impath1, impath2, border, prev=None):
     M = cv2.invertAffineTransform(T[:2])
 
     if border is not None:
-        im2 = cv2.copyMakeBorder(im2, border, border, border, border, 
-            borderType=cv2.BORDER_CONSTANT, value=(255,255,255))
+        im2 = cv2.copyMakeBorder(im2, border, border, border, border,
+                                 borderType=cv2.BORDER_CONSTANT, value=(255, 255, 255))
 
     warped_im2 = warp_im(im2, M, im1.shape, prev)
 
     filename = os.path.basename(impath2).split('.')[0]
-    cv2.imwrite("{}/{}.jpg".format(OUTPUT_DIR, filename), warped_im2)
+    person_out_dir = os.path.join(OUTPUT_DIR, filename.split("_")[1])
+    cv2.imwrite("{}/{}.jpg".format(person_out_dir, filename), warped_im2)
     print("Aligned {}".format(filename))
     return warped_im2
+
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
@@ -176,13 +183,31 @@ if __name__ == "__main__":
 
     # Constraints on input images (for aligning):
     # - Must have clear frontal view of a face (there may be multiple)
-    # - Filenames must be in lexicographic order of the order in which they are to appear  
-    
+    # - Filenames must be in lexicographic order of the order in which they are to appear
+
     im_files = [f for f in os.listdir(im_dir) if get_ext(f) in valid_formats]
     im_files = sorted(im_files, key=lambda x: x.split('/'))
+    total = len(im_files)
+    i = 0
     for im in im_files:
-        if overlay:
-            prev = align_images(target, im_dir + '/' + im, border, prev)
-        else:
-            align_images(target, im_dir + '/' + im, border)
+        i += 1
+        filename = os.path.basename(im).split('.')[0]
+        print(f"[{i * 100 // total}%]: ", end='')
 
+        person_out_dir = os.path.join(OUTPUT_DIR, filename.split("_")[1])
+        try:
+            os.makedirs(person_out_dir)
+            print("Directory ", person_out_dir, " Created ")
+        except FileExistsError:
+            print("Directory ", person_out_dir, " already exists")
+
+        if os.path.isfile(os.path.join(person_out_dir, f"{filename}.jpg")):
+            print(f"Skipping: File {filename} exist")
+            continue
+        try:
+            if overlay:
+                prev = align_images(target, im_dir + '/' + im, border, prev)
+            else:
+                align_images(target, im_dir + '/' + im, border)
+        except AssertionError as e:
+            print(f"Skipping {im}: {e}")
